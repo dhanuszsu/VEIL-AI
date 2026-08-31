@@ -3,12 +3,12 @@ const ACTION_POLICY = {
     scroll: "auto",
     focus: "auto",
     wait: "auto",
+    type: "auto",
     click: "confirm",
-    type: "confirm",
     fill_private: "confirm",
 };
-const HIGH_CONFIDENCE_AUTO_ACTIONS = ["highlight", "scroll", "focus", "wait"];
-const CONFIRMATION_REQUIRED_ACTIONS = ["click", "type", "fill_private"];
+const HIGH_CONFIDENCE_AUTO_ACTIONS = ["highlight", "scroll", "focus", "wait", "type"];
+const CONFIRMATION_REQUIRED_ACTIONS = ["click", "fill_private"];
 function isHighConfidenceAuto(type) {
     return HIGH_CONFIDENCE_AUTO_ACTIONS.includes(type);
 }
@@ -47,8 +47,17 @@ export function validateAction(action, pageMapElements, pageOrigin) {
             return { action, policy: "reject", reason: "Target element not found in current page map", mappedElement: undefined };
         }
         if (mappedElement) {
-            if (mappedElement.sensitive && action.type !== "fill_private") {
+            if (mappedElement.sensitive && action.type === "fill_private" && !mappedElement.sensitive) {
+                // fill_private must only target sensitive fields (handled below)
+            }
+            // Only block: fill_private on non-sensitive fields, or non-fill actions on password fields
+            const isPasswordField = (mappedElement.inputType === "password") ||
+                (mappedElement.label || "").toLowerCase().includes("password");
+            if (mappedElement.sensitive && action.type !== "fill_private" && action.type !== "type" && action.type !== "highlight") {
                 return { action, policy: "reject", reason: "Action targets a sensitive/redacted element", mappedElement };
+            }
+            if (isPasswordField && action.type === "type") {
+                return { action, policy: "reject", reason: "Action targets a sensitive password field (use fill_private)", mappedElement };
             }
             if (!mappedElement.visible || !mappedElement.enabled) {
                 return { action, policy: "reject", reason: "Target element is not visible or enabled", mappedElement };

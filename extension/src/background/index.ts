@@ -124,8 +124,17 @@ function validateActionLocally(
       };
     }
 
-    // Check if element is sensitive
-    if (targetElement.sensitive && action.type !== "fill_private") {
+    // Check if element is sensitive password field (must use fill_private)
+    const isPasswordField = (targetElement.inputType === "password") ||
+      (targetElement.label || "").toLowerCase().includes("password");
+    if (isPasswordField && action.type === "type") {
+      return {
+        valid: false,
+        reason: `Target element ${action.target.elementId} is a sensitive password field (use fill_private).`,
+        action,
+      };
+    }
+    if (targetElement.sensitive && action.type !== "fill_private" && action.type !== "type" && action.type !== "highlight") {
       return {
         valid: false,
         reason: `Target element ${action.target.elementId} is sensitive and cannot be acted upon directly.`,
@@ -408,7 +417,7 @@ async function executeAgentStep(
     const stepSuccess = Boolean(actionResult?.success);
     const stepVerified = Boolean(actionResult?.verified);
 
-    steps.push({
+    const stepRecord: AgentStep = {
       stepNumber: currentStep + 1,
       action,
       result: stepSuccess ? "success" : "failed",
@@ -417,7 +426,14 @@ async function executeAgentStep(
       timestamp: new Date().toISOString(),
       verified: stepVerified,
       details: actionResult?.details,
-    });
+    };
+
+    const existingIndex = steps.findIndex((s) => s.stepNumber === currentStep + 1);
+    if (existingIndex >= 0) {
+      steps[existingIndex] = stepRecord;
+    } else {
+      steps.push(stepRecord);
+    }
 
     agentExecution.currentStep = currentStep + 1;
 
@@ -431,7 +447,7 @@ async function executeAgentStep(
     return { success: true, stepResult: actionResult };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    steps.push({
+    const failRecord: AgentStep = {
       stepNumber: currentStep + 1,
       action,
       result: "failed",
@@ -440,7 +456,13 @@ async function executeAgentStep(
       timestamp: new Date().toISOString(),
       verified: false,
       details: {},
-    });
+    };
+    const existingIndex = steps.findIndex((s) => s.stepNumber === currentStep + 1);
+    if (existingIndex >= 0) {
+      steps[existingIndex] = failRecord;
+    } else {
+      steps.push(failRecord);
+    }
     agentExecution.status = "failed";
     agentExecution.isExecuting = false;
     return { success: false, error: errorMsg };
@@ -470,7 +492,7 @@ async function startAgentExecution(
   agentExecution.classification = classification;
   agentExecution.plan = plan;
   agentExecution.currentStep = 0;
-  agentExecution.maxSteps = 10;
+  agentExecution.maxSteps = Math.max(50, plan.actions.length);
   agentExecution.steps = [];
   agentExecution.status = "observing";
   agentExecution.lastPageMap = payload.pageMap;
@@ -739,7 +761,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               classification,
               plan,
               currentStep: 0,
-              maxSteps: 10,
+              maxSteps: Math.max(50, plan.actions.length),
               steps: [],
               status: "waiting_for_confirmation",
               lastPageMap: payload.pageMap,
@@ -760,7 +782,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               classification,
               plan,
               currentStep: 0,
-              maxSteps: 10,
+              maxSteps: Math.max(50, plan.actions.length),
               steps: [],
               status: isInformational ? "completed" : "ready",
               lastPageMap: payload.pageMap,
@@ -853,6 +875,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           });
 
           const stepResult = await executeAgentStep(payload, payload?.pageMap?.elements ?? []);
+
+          while (state.agentExecution.isExecuting && (state.agentExecution.status as AgentState) !== "waiting_for_confirmation") {
+            await new Promise((r) => setTimeout(r, 50));
+            if (state.agentExecution.plan && state.agentExecution.currentStep < state.agentExecution.plan.actions.length) {
+              await executeAgentStep(payload, payload?.pageMap?.elements ?? []);
+            } else {
+              break;
+            }
+          }
+
           sendResponse({ success: true, stepResult, agentExecution: state.agentExecution });
           break;
         }

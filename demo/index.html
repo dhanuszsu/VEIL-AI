@@ -225,7 +225,72 @@
       showFeedback('⚠ Action cancelled', 'warning');
     });
     document.getElementById('deleteBtn').addEventListener('click', () => {
-      showFeedback('🛑 Delete requested - account marked for deletion', 'danger');
+      document.querySelectorAll('input, textarea').forEach(el => {
+        el.value = '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      document.querySelectorAll('select').forEach(el => {
+        el.selectedIndex = 0;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      showFeedback('🛑 Delete requested - all inputs and account details cleared', 'danger');
+    });
+
+    // Listen for agent commands from Veil Agentic Browser via postMessage
+    window.addEventListener('message', (event) => {
+      if (!event.data || event.data.type !== 'VEIL_EXECUTE_ACTION') return;
+      const action = event.data.action;
+      if (!action) return;
+
+      const target = action.target || {};
+      const selector = target.selector;
+      const label = (target.label || '').toLowerCase().trim();
+
+      let el = null;
+      if (selector) {
+        try { el = document.querySelector(selector); } catch (e) {}
+      }
+      if (!el && label) {
+        // Find matching input or element by ID, placeholder, name, label text, or button text
+        el = Array.from(document.querySelectorAll('input, button, select, textarea, a')).find(e => {
+          const t = (e.innerText || '').toLowerCase();
+          const p = (e.getAttribute('placeholder') || '').toLowerCase();
+          const n = (e.getAttribute('name') || '').toLowerCase();
+          const id = (e.id || '').toLowerCase();
+          const lbl = e.id ? document.querySelector(`label[for="${e.id}"]`)?.innerText?.toLowerCase() || '' : '';
+          return t.includes(label) || p.includes(label) || n.includes(label) || id.includes(label) || lbl.includes(label);
+        });
+      }
+
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        if (action.type === 'highlight') {
+          el.style.outline = '3px solid #00f0ff';
+          el.style.boxShadow = '0 0 20px rgba(0,240,255,0.7)';
+        } else if (action.type === 'type') {
+          if (el.tagName === 'SELECT') {
+            el.selectedIndex = 1;
+          } else {
+            el.value = action.value || '';
+          }
+          el.style.outline = '2px solid #00f0ff';
+          el.style.boxShadow = '0 0 10px rgba(0,240,255,0.5)';
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (action.type === 'fill_private') {
+          const passEl = document.querySelector('input[type="password"]') || el;
+          passEl.value = 'LocalSecret123!';
+          passEl.style.outline = '2px solid #10b981';
+          passEl.style.boxShadow = '0 0 10px rgba(16,185,129,0.5)';
+          passEl.dispatchEvent(new Event('input', { bubbles: true }));
+          passEl.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (action.type === 'click') {
+          el.style.outline = '3px solid #00f0ff';
+          el.click();
+        }
+      }
     });
   </script>
 </body>

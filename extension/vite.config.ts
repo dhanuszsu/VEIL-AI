@@ -106,8 +106,14 @@ export default defineConfig({
           const src = join(ONNXRT_DIR, asset);
           if (existsSync(src)) {
             const dest = resolve(distDir, asset);
-            mkdirSync(resolve(distDir, ".."), { recursive: true });
-            copyFileSync(src, dest);
+            try {
+              if (existsSync(dest) && statSync(dest).size === statSync(src).size) {
+                return;
+              }
+              copyFileSync(src, dest);
+            } catch (err) {
+              console.warn(`[WARN] Skipping copy of ${asset}:`, err);
+            }
           }
         });
       },

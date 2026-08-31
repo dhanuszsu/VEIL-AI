@@ -207,11 +207,12 @@ describe("Action Policy Validation", () => {
       expect(ACTION_POLICY.scroll).toBe("auto");
       expect(ACTION_POLICY.focus).toBe("auto");
       expect(ACTION_POLICY.wait).toBe("auto");
+      expect(ACTION_POLICY.type).toBe("auto");
     });
 
     it("defines confirm policies for risky actions", () => {
       expect(ACTION_POLICY.click).toBe("confirm");
-      expect(ACTION_POLICY.type).toBe("confirm");
+      expect(ACTION_POLICY.fill_private).toBe("confirm");
     });
 
     it("lists high confidence auto actions", () => {
@@ -219,11 +220,12 @@ describe("Action Policy Validation", () => {
       expect(HIGH_CONFIDENCE_AUTO_ACTIONS).toContain("scroll");
       expect(HIGH_CONFIDENCE_AUTO_ACTIONS).toContain("focus");
       expect(HIGH_CONFIDENCE_AUTO_ACTIONS).toContain("wait");
+      expect(HIGH_CONFIDENCE_AUTO_ACTIONS).toContain("type");
     });
 
     it("lists confirmation required actions", () => {
       expect(CONFIRMATION_REQUIRED_ACTIONS).toContain("click");
-      expect(CONFIRMATION_REQUIRED_ACTIONS).toContain("type");
+      expect(CONFIRMATION_REQUIRED_ACTIONS).toContain("fill_private");
     });
   });
 });

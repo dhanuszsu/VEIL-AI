@@ -23,6 +23,19 @@ const INFORMATIONAL_KEYWORDS = [
   "what information is this page asking me for",
   "what is this page asking",
   "what fields are on this page",
+  "analyze this page for sensitive data and privacy risks",
+  "analyze this page",
+  "analyze page",
+  "analyze privacy",
+  "analyze",
+  "privacy audit",
+  "privacy risks",
+  "privacy analysis",
+  "privacy",
+  "sensitive data",
+  "audit privacy",
+  "check privacy",
+  "inspect privacy",
 ];
 
 const DELETE_KEYWORDS = [
@@ -293,7 +306,7 @@ function extractIntentFromGoal(goal: string): { mode: GoalMode; intent?: GoalInt
       value = typeIntoMatch[1].trim();
       target = typeIntoMatch[2].trim();
     } else {
-      const fillAsMatch = raw.match(/(?:fill|enter|type|input|set)\s+(?:the\s+|my\s+)?(.+?)\s+(?:as|with|=|to)\s+(.+)/i);
+      const fillAsMatch = raw.match(/(?:fill|enter|type|input|set)\s+(?:the\s+|my\s+)?(.+?)\s+(?:using|with|as|=|to)\s+(.+)/i);
       if (fillAsMatch) {
         target = fillAsMatch[1].trim();
         value = fillAsMatch[2].trim();
@@ -303,6 +316,13 @@ function extractIntentFromGoal(goal: string): { mode: GoalMode; intent?: GoalInt
           target = fillOnlyMatch[1].trim();
         }
       }
+    }
+
+    // Clean up targets like "out the form" or "out form" -> "form"
+    if (target.toLowerCase().startsWith("out the ")) {
+      target = target.replace(/^out\s+the\s+/i, "");
+    } else if (target.toLowerCase().startsWith("out ")) {
+      target = target.replace(/^out\s+/i, "");
     }
 
     return {

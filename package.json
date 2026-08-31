@@ -5,7 +5,9 @@
   "workspaces": [
     "extension",
     "server",
-    "shared"
+    "shared",
+    "agentic-browser",
+    "browser-app"
   ],
   "scripts": {
     "dev:extension": "npm run dev --workspace=extension",
@@ -14,6 +16,9 @@
     "build:server": "npm run build --workspace=server",
     "build:shared": "npm run build --workspace=shared",
     "build": "npm run build:shared && npm run build:extension && npm run build:server",
+    "agent:browser": "npm run start --workspace=@privatesight/agentic-browser --",
+    "agent:demo": "npm run demo --workspace=@privatesight/agentic-browser",
+    "browser": "npm run dev --workspace=@privatesight/browser-app",
     "test": "vitest run",
     "lint": "npm run lint --workspaces",
     "demo": "npx serve -l 3002 demo",

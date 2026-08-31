@@ -359,4 +359,86 @@ describe("Rule-Based Planner", () => {
     expect(plan.actions.length).toBe(0);
     expect(plan.summary).toContain("clarify");
   });
+
+  describe("Quick Action Goals", () => {
+    it("handles 'Analyze this page for sensitive data and privacy risks' with 0 browser actions and privacy audit", () => {
+      const context = {
+        userGoal: "Analyze this page for sensitive data and privacy risks",
+        pageMap: createMockPageMap(mockElements),
+        redactionManifest: [
+          { category: "email", bounds: { x: 100, y: 400, width: 300, height: 40 }, confidence: 0.95, replacement: "[REDACTED_EMAIL]" },
+          { category: "password", bounds: { x: 100, y: 500, width: 300, height: 40 }, confidence: 0.95, replacement: "[REDACTED_PASSWORD]" },
+        ],
+      };
+
+      const classification = classifyGoal(context.userGoal, context.pageMap);
+      expect(classification.mode === "information" || classification.mode === "informational").toBe(true);
+      expect(shouldExecuteActions(classification)).toBe(false);
+
+      const plan = createRuleBasedPlan(context);
+      expect(plan.actions).toHaveLength(0);
+      expect(plan.summary).toContain("Privacy Audit Complete");
+      expect(plan.summary).toContain("sensitive element(s)");
+    });
+
+    it("handles 'Fill the password field using my local secret' by generating fill_private action", () => {
+      const context = {
+        userGoal: "Fill the password field using my local secret",
+        pageMap: createMockPageMap(mockElements),
+        redactionManifest: [],
+      };
+
+      const classification = classifyGoal(context.userGoal, context.pageMap);
+      expect(classification.mode).toBe("fill");
+
+      const plan = createRuleBasedPlan(context);
+      expect(plan.actions.length).toBeGreaterThan(0);
+      const privateAction = plan.actions.find((a) => a.type === "fill_private");
+      expect(privateAction).toBeDefined();
+      expect(privateAction?.target?.elementId).toBe("el-5");
+      expect(privateAction?.value).toBeUndefined(); // Value must never leave client
+      expect(plan.requiresUserConfirmation).toBe(true);
+    });
+
+    it("handles 'Fill out the form with my details' by filling safe editable fields", () => {
+      const context = {
+        userGoal: "Fill out the form with my details",
+        pageMap: createMockPageMap(mockElements),
+        redactionManifest: [],
+      };
+
+      const classification = classifyGoal(context.userGoal, context.pageMap);
+      expect(classification.mode).toBe("fill");
+
+      const plan = createRuleBasedPlan(context);
+      expect(plan.actions.length).toBeGreaterThan(0);
+      // Fills safe fields (el-3 full name) and PII fields (el-4 email) with demo values
+      // Password field (el-5) gets a fill_private action
+      const filledElementIds = plan.actions.map((a) => a.target?.elementId);
+      expect(filledElementIds).toContain("el-3"); // full name - safe field
+      expect(filledElementIds).toContain("el-4"); // email - PII, filled with demo value
+      // el-5 (password) should be handled via fill_private, not type
+      const passwordAction = plan.actions.find((a) => a.target?.elementId === "el-5");
+      if (passwordAction) {
+        expect(passwordAction.type).toBe("fill_private"); // must not use plain type on password
+      }
+    });
+
+    it("handles 'Find the most important element on this page' by highlighting the primary action", () => {
+      const context = {
+        userGoal: "Find the most important element on this page",
+        pageMap: createMockPageMap(mockElements),
+        redactionManifest: [],
+      };
+
+      const classification = classifyGoal(context.userGoal, context.pageMap);
+      expect(classification.mode).toBe("find");
+
+      const plan = createRuleBasedPlan(context);
+      expect(plan.actions.length).toBeGreaterThan(0);
+      expect(plan.actions[0].type).toBe("highlight");
+      expect(plan.actions[0].target?.elementId).toBe("el-1"); // Submit Request button
+      expect(plan.summary).toContain("primary element");
+    });
+  });
 });

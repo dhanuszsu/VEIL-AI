@@ -113,8 +113,16 @@ function isActionRelevantToGoal(action, classification, pageElements) {
     const collapsedContext = fullTargetContext.replace(/[\s_-]+/g, "");
     const intentTarget = intent.target?.toLowerCase() || "";
     const intentAction = intent.action?.toLowerCase() || "";
+    const isGenericSemanticTarget = intentTarget.includes("most important") ||
+        intentTarget.includes("main element") ||
+        intentTarget.includes("primary element") ||
+        intentTarget.includes("key element") ||
+        intentTarget === "element" ||
+        intentTarget === "button" ||
+        intentTarget.includes("important element");
     const targetKeywords = extractNonStopWords(intentTarget);
-    const matchesTarget = targetKeywords.length === 0 ||
+    const matchesTarget = isGenericSemanticTarget ||
+        targetKeywords.length === 0 ||
         targetKeywords.some((kw) => fullTargetContext.includes(kw) || collapsedContext.includes(kw.replace(/[\s_-]+/g, "")));
     if (intentAction === "click" || intentAction === "press" || intentAction === "tap" || intentAction === "select") {
         if (action.type !== "click" && action.type !== "focus" && action.type !== "highlight") {
@@ -135,10 +143,11 @@ function isActionRelevantToGoal(action, classification, pageElements) {
         return targetElement.role === "searchbox" || fullTargetContext.includes("search");
     }
     if (intentAction === "fill" || intentAction === "enter" || intentAction === "type" || intentAction === "input") {
-        if (action.type !== "type" && action.type !== "focus" && action.type !== "highlight") {
+        if (action.type !== "type" && action.type !== "fill_private" && action.type !== "focus" && action.type !== "highlight") {
             return false;
         }
-        return matchesTarget;
+        const isFormLevelFill = intentTarget === "form" || intentTarget === "out the form" || intentTarget.includes("form") || intentTarget.includes("details");
+        return matchesTarget || isFormLevelFill;
     }
     if (intentAction === "delete") {
         if (action.type !== "click" && action.type !== "highlight" && action.type !== "focus") {
@@ -171,12 +180,16 @@ function isDestructiveAction(action, targetElement) {
     }
     return false;
 }
+function isFormLevelFillGoal(classification) {
+    const target = (classification.extractedIntent?.target || "").toLowerCase();
+    return target === "form" || target === "out the form" || target.includes("form") || target.includes("details");
+}
 export function validateActionAgainstGoal(action, context) {
     const { userGoal, classification, pageElements, previousActions, stepNumber } = context;
-    if (stepNumber > 10) {
+    if (stepNumber > 50) {
         return {
             valid: false,
-            reason: "Maximum step count (10) exceeded. Stopping to prevent infinite loop.",
+            reason: "Maximum step count (50) exceeded. Stopping to prevent infinite loop.",
             action,
         };
     }
@@ -197,12 +210,22 @@ export function validateActionAgainstGoal(action, context) {
             };
         }
         if (targetElement) {
+            const isWholeForm = isFormLevelFillGoal(classification);
+            const isPasswordField = targetElement.inputType === "password" || (targetElement.label || "").toLowerCase().includes("password");
             if (targetElement.sensitive) {
-                return {
-                    valid: false,
-                    reason: "Action targets a sensitive/redacted element.",
-                    action,
-                };
+                if (action.type === "fill_private" || action.type === "highlight") {
+                    // Allowed
+                }
+                else if (isWholeForm && action.type === "type" && !isPasswordField) {
+                    // Allowed for filling full form
+                }
+                else {
+                    return {
+                        valid: false,
+                        reason: "Action targets a sensitive/redacted element.",
+                        action,
+                    };
+                }
             }
             if (!targetElement.visible || !targetElement.enabled) {
                 return {
@@ -211,7 +234,7 @@ export function validateActionAgainstGoal(action, context) {
                     action,
                 };
             }
-            if (isDestructiveAction(action, targetElement) && !classification.extractedIntent?.action?.match(/click|submit/)) {
+            if (isDestructiveAction(action, targetElement) && !classification.extractedIntent?.action?.match(/click|submit|delete|remove|destroy|erase|close/)) {
                 return {
                     valid: false,
                     reason: `Action targets potentially destructive element "${targetElement.label}" but goal doesn't explicitly request it.`,

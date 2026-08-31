@@ -50,7 +50,7 @@ const QUICK_GOALS = [
 ];
 
 const Popup: React.FC<PopupProps> = () => {
-  const [active, setActive] = useState(false);
+  const [active, setActive] = useState(true);
   const [serverConnected, setServerConnected] = useState(false);
   const [serverUrl, setServerUrl] = useState("http://localhost:3001");
   const [privacyStatus, setPrivacyStatus] = useState<PrivacyStatus | null>(null);
@@ -149,8 +149,9 @@ const Popup: React.FC<PopupProps> = () => {
     }
   }, [agentExecution, sendBackgroundMessage, pollingInterval]);
 
-  const handleCapture = useCallback(async () => {
-    if (!userGoal.trim()) {
+  const handleCapture = useCallback(async (goalOverride?: string) => {
+    const targetGoal = (goalOverride !== undefined ? goalOverride : userGoal).trim();
+    if (!targetGoal) {
       setError("Please enter a goal before analyzing the page.");
       return;
     }
@@ -161,8 +162,8 @@ const Popup: React.FC<PopupProps> = () => {
     setAgentExecution(null);
 
     try {
-      console.log(`[VEIL][POPUP] sending ANALYZE: "${userGoal}"`);
-      const response = await sendBackgroundMessage("ANALYZE_AND_PLAN", { userGoal });
+      console.log(`[VEIL][POPUP] sending ANALYZE: "${targetGoal}"`);
+      const response = await sendBackgroundMessage("ANALYZE_AND_PLAN", { userGoal: targetGoal });
       if (!response.success) {
         throw new Error(response.error || "Failed to analyze and plan");
       }
@@ -463,7 +464,11 @@ const Popup: React.FC<PopupProps> = () => {
               <button
                 key={q.label}
                 className={`chip ${userGoal === q.goal ? "chip--active" : ""}`}
-                onClick={() => setUserGoal(q.goal)}
+                onClick={() => {
+                  setUserGoal(q.goal);
+                  handleCapture(q.goal);
+                }}
+                disabled={loading}
                 title={q.label}
               >
                 {q.icon}
@@ -490,7 +495,7 @@ const Popup: React.FC<PopupProps> = () => {
         </div>
 
         <button
-          onClick={handleCapture}
+          onClick={() => handleCapture()}
           disabled={loading || !active || !userGoal.trim() || !serverConnected}
           className="btn btn--primary btn--block"
         >
@@ -574,7 +579,7 @@ const Popup: React.FC<PopupProps> = () => {
                       </div>
                     )}
 
-                    {(agentStatus === "waiting_for_confirmation" || (serverPlan.requiresUserConfirmation && !agentExecution?.steps.some((s) => s.result === "success"))) && (
+                    {(agentStatus === "waiting_for_confirmation" || (serverPlan.requiresUserConfirmation && !agentExecution?.steps.some((s) => s.result === "success"))) && validatedActions.length > 0 && (
                       <div style={{ marginTop: "12px" }}>
                         <HighRiskConfirmationCard
                           plan={serverPlan}

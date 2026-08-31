@@ -30,7 +30,7 @@ describe("Emergency Stop & Loop Protection", () => {
         classification,
         pageElements: elements,
         previousActions: [],
-        stepNumber: 11, // Exceeded step 10
+        stepNumber: 51, // Exceeded max steps (50)
       }
     );
 

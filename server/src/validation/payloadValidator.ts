@@ -42,6 +42,8 @@ export function validatePayload(req: Request, res: Response, next: NextFunction)
 export function sanitizeOriginCheck(req: Request, res: Response, next: NextFunction): void {
   const origin = req.get("origin") || req.get("referer") || "";
   const allowedOrigins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://localhost:3002",
     "http://127.0.0.1:3002",
     "http://localhost:5173",

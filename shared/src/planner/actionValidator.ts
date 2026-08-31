@@ -142,9 +142,19 @@ function isActionRelevantToGoal(action: ServerAction, classification: GoalClassi
 
   const intentTarget = intent.target?.toLowerCase() || "";
   const intentAction = intent.action?.toLowerCase() || "";
+  const isGenericSemanticTarget =
+    intentTarget.includes("most important") ||
+    intentTarget.includes("main element") ||
+    intentTarget.includes("primary element") ||
+    intentTarget.includes("key element") ||
+    intentTarget === "element" ||
+    intentTarget === "button" ||
+    intentTarget.includes("important element");
+
   const targetKeywords = extractNonStopWords(intentTarget);
 
   const matchesTarget =
+    isGenericSemanticTarget ||
     targetKeywords.length === 0 ||
     targetKeywords.some((kw) => fullTargetContext.includes(kw) || collapsedContext.includes(kw.replace(/[\s_-]+/g, "")));
 
@@ -170,10 +180,11 @@ function isActionRelevantToGoal(action: ServerAction, classification: GoalClassi
   }
 
   if (intentAction === "fill" || intentAction === "enter" || intentAction === "type" || intentAction === "input") {
-    if (action.type !== "type" && action.type !== "focus" && action.type !== "highlight") {
+    if (action.type !== "type" && action.type !== "fill_private" && action.type !== "focus" && action.type !== "highlight") {
       return false;
     }
-    return matchesTarget;
+    const isFormLevelFill = intentTarget === "form" || intentTarget === "out the form" || intentTarget.includes("form") || intentTarget.includes("details");
+    return matchesTarget || isFormLevelFill;
   }
 
   if (intentAction === "delete") {
@@ -214,16 +225,21 @@ function isDestructiveAction(action: ServerAction, targetElement: SanitizedEleme
   return false;
 }
 
+function isFormLevelFillGoal(classification: GoalClassification): boolean {
+  const target = (classification.extractedIntent?.target || "").toLowerCase();
+  return target === "form" || target === "out the form" || target.includes("form") || target.includes("details");
+}
+
 export function validateActionAgainstGoal(
   action: ServerAction,
   context: ActionValidationContext
 ): ValidationResult {
   const { userGoal, classification, pageElements, previousActions, stepNumber } = context;
 
-  if (stepNumber > 10) {
+  if (stepNumber > 50) {
     return {
       valid: false,
-      reason: "Maximum step count (10) exceeded. Stopping to prevent infinite loop.",
+      reason: "Maximum step count (50) exceeded. Stopping to prevent infinite loop.",
       action,
     };
   }
@@ -247,12 +263,21 @@ export function validateActionAgainstGoal(
     }
 
     if (targetElement) {
+      const isWholeForm = isFormLevelFillGoal(classification);
+      const isPasswordField = targetElement.inputType === "password" || (targetElement.label || "").toLowerCase().includes("password");
+
       if (targetElement.sensitive) {
-        return {
-          valid: false,
-          reason: "Action targets a sensitive/redacted element.",
-          action,
-        };
+        if (action.type === "fill_private" || action.type === "highlight") {
+          // Allowed
+        } else if (isWholeForm && action.type === "type" && !isPasswordField) {
+          // Allowed for filling full form
+        } else {
+          return {
+            valid: false,
+            reason: "Action targets a sensitive/redacted element.",
+            action,
+          };
+        }
       }
 
       if (!targetElement.visible || !targetElement.enabled) {
@@ -263,7 +288,7 @@ export function validateActionAgainstGoal(
         };
       }
 
-      if (isDestructiveAction(action, targetElement) && !classification.extractedIntent?.action?.match(/click|submit/)) {
+      if (isDestructiveAction(action, targetElement) && !classification.extractedIntent?.action?.match(/click|submit|delete|remove|destroy|erase|close/)) {
         return {
           valid: false,
           reason: `Action targets potentially destructive element "${targetElement.label}" but goal doesn't explicitly request it.`,
